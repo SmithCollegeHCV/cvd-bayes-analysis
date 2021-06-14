@@ -10,7 +10,7 @@ Import the cleanedData_cvd4 (from the cvd4 study -- interaction). Next, for each
 ```{r import and prep}
 library(lifecycle)
 library(cli)
-
+library(tidyverse)
 library(ggplot2)
 library(rcompanion)
 library(rstatix)
@@ -18,6 +18,7 @@ library(BayesFactor)
 library(dplyr)
 library(freqtables)
 
+cleanedData_cvd4 <- read_csv("cleanedData_cvd4.csv")
 dfCvd4Data <- data.frame(cleanedData_cvd4[,1]) 
 for (column in c(2:ncol(cleanedData_cvd4))){
   dfCvd4Data <- cbind(dfCvd4Data, cleanedData_cvd4[,column])
