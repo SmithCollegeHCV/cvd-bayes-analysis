@@ -5,7 +5,7 @@ date: "6/7/2021"
 output: html_document
 ---
 STEP ONE: Import and prep data for analysis
-Import the cleanedData_cvd4 (from the cvd4 study -- interaction). Next, for each data set, copy the data from the csv to a data frame. Filter out corrupted data, ie nonsense answers or skipped sections. Filter out colorblind responses. 
+Import the cleanedData_cvd4 (from the cvd4 study -- interaction). Next, for each data set, copy the data from the csv to a data frame. Filter out corrupted data, ie nonsense answers or skipped sections. Filter out colorblind responses.
 
 ```{r import and prep}
 library(lifecycle)

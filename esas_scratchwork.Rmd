@@ -1,0 +1,190 @@
+---
+title: "hi"
+output: html_document
+---
+
+# Setup 
+
+```{r import and prep}
+#This is from the main .Rmd file and is Alice's code
+
+library(tidyverse)
+library(ggplot2)
+library(rcompanion)
+library(rstatix)
+library(BayesFactor)
+library(freqtables)
+
+cleanedData_cvd4 <- read_csv("cleanedData_cvd4.csv")
+dfCvd4Data <- data.frame(cleanedData_cvd4[,1]) 
+for (column in c(2:ncol(cleanedData_cvd4))){
+  dfCvd4Data <- cbind(dfCvd4Data, cleanedData_cvd4[,column])
+}
+# drop people who skipped whole sections
+dfCvd4Data <- subset(dfCvd4Data, dfCvd4Data$drop == 0)
+
+# drop people who are colorblind or skipped that q
+dfCvd4Data <- subset(dfCvd4Data, dfCvd4Data$cb == 'not_colorblind')
+
+# drop people who put in answers less than 1 or greater than 100, or NAN
+dfCvd4Data <- subset(dfCvd4Data, (dfCvd4Data$ans1 > 0 & dfCvd4Data$ans1 <= 100))
+dfCvd4Data <- subset(dfCvd4Data, !is.na(dfCvd4Data$ans1))
+dfCvd4Data <- subset(dfCvd4Data, (dfCvd4Data$ans2 >= 0 & dfCvd4Data$ans2 <= 100))
+dfCvd4Data <- subset(dfCvd4Data, !is.na(dfCvd4Data$ans2))
+
+currCvd4Data <- data.frame("ID" = dfCvd4Data[,2], "stim" = dfCvd4Data[,4], "corr" = dfCvd4Data[,61], "spatial" = dfCvd4Data[,62])
+
+
+# How many people does that leave as participants?
+nrow(dfCvd4Data)
+```
+There are 76 participants left.
+
+
+# Ego centric screening questions
+I was confused by the ans01 and ans02 screening questions, and realized that they both record the complete answer to both ego questions, at the times before (ans01) and after (ans02) the participant sees the bayes reasoning questions.
+
+
+## Alice's work
+
+```{r proportion by ego-centric question}
+
+egoRightWrong <- data.frame(Study=character(), corr=integer())
+
+#filtering data to keep those who got the screening questions correct the first time (before cvd questions)
+cvd4ego <- subset(dfCvd4Data, dfCvd4Data$ans01 == 'true positive')
+
+egoRight <- data.frame("ID" = cvd4ego[,2], "stim" = cvd4ego[,4], "corr" = cvd4ego[,61], "spatial" = cvd4ego[,62])
+
+print(nrow(egoRight))
+
+#filtering data to keep those who got screening questions correct the second time (after seeing the cvd questions)
+cvd4ego2 <- subset(dfCvd4Data, dfCvd4Data$ans02 == 'true positive')
+
+egoRight2 <- data.frame("ID" = cvd4ego2[,2], "stim" = cvd4ego2[,4], "corr" = cvd4ego2[,61], "spatial" = cvd4ego2[,62])
+
+print(nrow(egoRight2))
+
+for(row in 1:nrow(egoRight)){
+  temp <- data.frame("egoRight", egoRight[row, 3])
+  names(temp) <- c("Study", "corr")
+  egoRightWrong <- rbind(egoRightWrong, temp)
+}
+
+for(row in 1:nrow(egoRight2)){
+  temp <- data.frame("egoRight2", egoRight2[row, 3])
+  names(temp) <- c("Study", "corr")
+  egoRightWrong <- rbind(egoRightWrong, temp)
+}
+
+for(row in 1:nrow(currCvd4Data)){
+   temp <- data.frame("cvd4", currCvd4Data[row, 3])
+  names(temp) <- c("Study", "corr")
+  egoRightWrong <- rbind(egoRightWrong, temp)
+}
+
+#str(egoRightWrong)
+
+egoRightWrongProp <- prop.test(x = c(sum(egoRight$corr), sum(currCvd4Data$corr)), n = c(nrow(egoRight), nrow(currCvd4Data)))
+egoRightWrongProp
+
+```
+
+```{r}
+#plot -- frequency table
+plt <- egoRightWrong %>% 
+  freq_table(Study, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt$sa <- "egoRightWrong Data"
+
+#graph
+g <- ggplot(plt,aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))),
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Question", y = 'Proportion of Correct Answers') + 
+ # scale_x_discrete(labels = c("ego (2nd)", "ego (1st)", "cvd-Bayes")) +
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=1/3) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+g
+
+```
+
+## How many people got each individual screening question correct?
+Out of personal curiosity more than anything -- the analysis isn't looking at the questions individually, but as a unit 
+
+```{r proportion by ego-centric question}
+
+#filtering data to keep those who got screening question 1 correct ...
+#...the first time
+print("Got the first question correct the first time")
+print(nrow(dfCvd4Data %>% filter(ans01 == 'true positive' | ans01 == 'false positive')))
+
+#...the second time
+print("Got the first question correct the second time")
+print(nrow(dfCvd4Data %>% filter(ans02 == 'true positive' | ans02 == 'false positive')))
+
+#filtering data to keep those who got screening question 2 correct...
+#...the first time
+print("Got the second question correct the first time")
+print(nrow(dfCvd4Data %>% filter(ans01 == 'true positive' | ans02 == 'false negative')))
+
+#...the second time
+print("Got the second question correct the second time")
+print(nrow(dfCvd4Data %>% filter(ans02 == 'true positive' | ans02 == 'false negative')))
+
+
+#people who got both correct...
+#...the first time
+print("Got both questions correct the first time")
+print(nrow(dfCvd4Data %>% filter(ans01 == 'true positive')))
+
+#...the second time
+print("Got both questions correct the second time")
+print(nrow(dfCvd4Data %>% filter(ans02 == 'true positive')))
+```
+
+
+#plot 
+plt <- egoRightWrong %>% 
+  freq_table(Study, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt$sa <- "egoRightWrong Data"
+
+
+g <- ggplot(plt, aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))),
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Study", y = 'Proportion of Correct Answers') + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=1/3) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+g
+
+```{r}
+dfCvd4Data %>% group_by(ans01, ans02) %>% 
+  filter(ans01 != ans02) %>% 
+  select(ans1, ans2, ans01, ans02) %>% 
+  mutate(n =n()) %>% 
+  distinct()
+```
+
+
+# Question 4
+Compare proportions of correct answers on the reasoning questions between participants who did get the attention check questions correct and participants who did not get the attention check questions correct
