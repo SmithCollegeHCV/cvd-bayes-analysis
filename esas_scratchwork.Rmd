@@ -152,18 +152,23 @@ print("Got both questions correct the second time")
 print(nrow(dfCvd4Data %>% filter(ans02 == 'true positive')))
 ```
 
+```{r}
+allQsData <- dfCvd4Data %>% 
+  select(postId, stim, ans01, ans02, ans1, ans2) %>% 
+  mutate(corrFirstQ1 = ifelse(ans01 == 'true positive' | ans02 == 'false positive', 1, 0),
+         corrFirstQ2 = ifelse(ans01 == 'true positive' | ans02 == 'false negative', 1, 0),
+         corrSecQ1 = ifelse(ans02 == 'true positive' | ans02 == 'false positive', 1, 0),
+         corrSecQ2 = ifelse(ans02 == 'true positive' | ans02 == 'false negative', 1, 0),
+         corrFirstBoth = ifelse(ans01 == 'true positive', 1, 0),
+         corrSecBoth = ifelse(ans02 == 'true positive', 1, 0),
+         corrBayes = ifelse(ans1 == 57 & ans2 == 56, 1, 0)) %>% 
+  select(corrFirstQ1, corrFirstQ2, corrSecQ1, corrSecQ2, corrFirstBoth, corrSecBoth, corrBayes) %>% 
+  pivot_longer(c(corrFirstQ1, corrFirstQ2, corrSecQ1, corrSecQ2, corrFirstBoth, corrSecBoth, corrBayes), names_to = "question", values_to = "correct") %>% 
+  freq_table(question, correct) %>% 
+  filter(col_cat == 1)
 
-#plot 
-plt <- egoRightWrong %>% 
-  freq_table(Study, corr)
-
-plt <- as.data.frame(plt)
-plt <- subset(plt, plt$col_cat == 1)
-plt$row_cat <- as.factor(plt$row_cat)
-plt$sa <- "egoRightWrong Data"
-
-
-g <- ggplot(plt, aes(x = row_cat, y = percent_row, 
+  #taken from alice's graph code
+ggplot(allQsData, aes(x = row_cat, y = percent_row, 
                group = row_cat, color = row_cat)) +
   ylim(0, 100) + 
   geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
@@ -175,7 +180,27 @@ g <- ggplot(plt, aes(x = row_cat, y = percent_row,
         aspect.ratio=1/3) +
   coord_flip() + 
   scale_color_brewer(palette="Dark2")
-g
+```
+```{r}
+allQsData %>% 
+  filter(row_cat == "corrFirstBoth" | row_cat == "corrSecBoth" | row_cat == "corrBayes") %>% 
+  ggplot(aes(x = row_cat, y = percent_row, group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))),
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Study", y = 'Proportion of Correct Answers') + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=1/3) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+```
+
+```{r}
+dfCvd4Data %>% summarize(sum(corr)/n())
+```
+
 
 ```{r}
 dfCvd4Data %>% group_by(ans01, ans02) %>% 
@@ -185,6 +210,43 @@ dfCvd4Data %>% group_by(ans01, ans02) %>%
   distinct()
 ```
 
+```{r}
+dfCvd4Data %>% 
+  select(postId, stim, ans01, ans02, ans1, ans2) %>% 
+  mutate(corrFirstQ1 = ifelse(ans01 == 'true positive' | ans02 == 'false positive', 1, 0),
+         corrFirstQ2 = ifelse(ans01 == 'true positive' | ans02 == 'false negative', 1, 0),
+         corrSecQ1 = ifelse(ans02 == 'true positive' | ans02 == 'false positive', 1, 0),
+         corrSecQ2 = ifelse(ans02 == 'true positive' | ans02 == 'false negative', 1, 0),
+         corrFirstBoth = ifelse(ans01 == 'true positive', 1, 0),
+         corrSecBoth = ifelse(ans02 == 'true positive', 1, 0),
+         corrBayes = ifelse(ans1 == 57 & ans2 == 56, 1, 0)) %>% 
+  select(corrFirstBoth, corrSecBoth, corrBayes) %>% 
+  summarize(total = n(),
+            tot_first = sum(corrFirstBoth), 
+            tot_sec = sum(corrSecBoth), 
+            tot_bayes = sum(corrBayes))
+```
 
 # Question 4
 Compare proportions of correct answers on the reasoning questions between participants who did get the attention check questions correct and participants who did not get the attention check questions correct
+
+```{r}
+dfCvd4Data %>% 
+  select(postId, stim, ans01, ans02, ans1, ans2) %>% 
+  mutate(corrFirstQ1 = ifelse(ans01 == 'true positive' | ans02 == 'false positive', 1, 0),
+         corrFirstQ2 = ifelse(ans01 == 'true positive' | ans02 == 'false negative', 1, 0),
+         corrSecQ1 = ifelse(ans02 == 'true positive' | ans02 == 'false positive', 1, 0),
+         corrSecQ2 = ifelse(ans02 == 'true positive' | ans02 == 'false negative', 1, 0),
+         corrFirstBoth = ifelse(ans01 == 'true positive', 1, 0),
+         corrSecBoth = ifelse(ans02 == 'true positive', 1, 0),
+         corrBayes = ifelse(ans1 == 57 & ans2 == 56, 1, 0)) %>% 
+  select(postId, stim, corrFirstBoth, corrSecBoth, corrBayes) %>% 
+  group_by(corrSecBoth, corrBayes) %>% 
+  summarize(n())
+```
+%>% 
+  pivot_longer(c(corrFirstQ1, corrFirstQ2, corrSecQ1, corrSecQ2, corrFirstBoth, corrSecBoth, corrBayes), names_to = "question", values_to = "correct") %>% 
+  freq_table(question, correct) %>% 
+  filter(col_cat == 1)
+```
+

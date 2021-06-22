@@ -36,7 +36,9 @@ dfCvd4Data <- subset(dfCvd4Data, (dfCvd4Data$ans2 >= 0 & dfCvd4Data$ans2 <= 100)
 dfCvd4Data <- subset(dfCvd4Data, !is.na(dfCvd4Data$ans2))
 
 currCvd4Data <- data.frame("ID" = dfCvd4Data[,2], "stim" = dfCvd4Data[,4], "corr" = dfCvd4Data[,61], "spatial" = dfCvd4Data[,62])
-
+```
+```{r}
+nrow(dfCvd4Data)
 # str(currCvd4Data)
 
 ```
@@ -89,6 +91,8 @@ print(nrow(egoRight))
 cvd4ego2 <- subset(dfCvd4Data, dfCvd4Data$ans02 == 'true positive')
 
 egoRight2 <- data.frame("ID" = cvd4ego2[,2], "stim" = cvd4ego2[,4], "corr" = cvd4ego2[,61], "spatial" = cvd4ego2[,62])
+
+print(nrow(egoRight2))
 
 for(row in 1:nrow(egoRight)){
   temp <- data.frame("egoRight", egoRight[row, 3])
