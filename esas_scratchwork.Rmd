@@ -1,5 +1,6 @@
 ---
-title: "hi"
+title: "scratchwork"
+author: "Esa"
 output: html_document
 ---
 
@@ -47,7 +48,7 @@ I was confused by the ans01 and ans02 screening questions, and realized that the
 
 ## Alice's work
 
-```{r proportion by ego-centric question}
+```{r}
 
 egoRightWrong <- data.frame(Study=character(), corr=integer())
 
@@ -121,7 +122,7 @@ g
 ## How many people got each individual screening question correct?
 Out of personal curiosity more than anything -- the analysis isn't looking at the questions individually, but as a unit 
 
-```{r proportion by ego-centric question}
+```{r}
 
 #filtering data to keep those who got screening question 1 correct ...
 #...the first time
@@ -228,25 +229,58 @@ dfCvd4Data %>%
 ```
 
 # Question 4
-Compare proportions of correct answers on the reasoning questions between participants who did get the attention check questions correct and participants who did not get the attention check questions correct
+Compare proportions of correct answers on the reasoning questions between participants who did get the attention check questions correct and participants who did not get the attention check questions correct.
+
+In order to do this, I need to divide participants into those who got the attention check questions correct and those who did not, and then see how each of those two groups did on the reasoning questions.
+
+First, how many people in got the attention check questions correct and the reasoning questions correct?
+```{r}
+dfCvd4Data %>% 
+  select(postId, stim, ans01, ans02, ans1, ans2) %>% 
+  mutate(corrFirstEgo = ifelse(ans01 == 'true positive', 1, 0),
+         corrSecEgo = ifelse(ans02 == 'true positive', 1, 0),
+         corrBayes = ifelse(ans1 == 57 & ans2 == 56, 1, 0)) %>% 
+  select(postId, stim, corrFirstEgo, corrSecEgo, corrBayes) %>% 
+  group_by(corrFirstEgo, corrBayes) %>% 
+  summarize(n())
+```
+
+Of the people 21 participants who got the attention check questions wrong (the second time), 18 of them got the reasoning questions wrong and 3 of them got the reasoning questions correct. Of the 55 participants who got the attention check questions correct (the second time), 39 of them got the reasoning questions wrong and 16 of them got the reasoning questions correct.
+
+ |             | Ego Wrong | Ego Right | Total |
+ |-------------|-----------|-----------|-------|
+ | Bayes Wrong | 18        | 39        | umm   |
+ | Bayes Right | 3         | 16        | 19    |
+ | Total       | 21        | 55        |  76   |
+ 
+Note that if we're looking at the first round for the attention check questions, the numbers come out as:
+
+ |             | Ego Wrong | Ego Right | Total |
+ |-------------|-----------|-----------|-------|
+ | Bayes Wrong | 22        | 35        | umm   |
+ | Bayes Right | 3         | 16        | 19    |
+ | Total       | 25        | 51        | 76    |
+
+
+## Visualizations
+
+What would be the best way to visualize this question? 
+*Compare proportions of correct answers on the reasoning questions between participants who did get the attention check questions correct and participants who did not get the attention check questions correct.*
+
+Proportions out of two wholes -- it might be helpful to use a stacked bar chart.
 
 ```{r}
 dfCvd4Data %>% 
   select(postId, stim, ans01, ans02, ans1, ans2) %>% 
-  mutate(corrFirstQ1 = ifelse(ans01 == 'true positive' | ans02 == 'false positive', 1, 0),
-         corrFirstQ2 = ifelse(ans01 == 'true positive' | ans02 == 'false negative', 1, 0),
-         corrSecQ1 = ifelse(ans02 == 'true positive' | ans02 == 'false positive', 1, 0),
-         corrSecQ2 = ifelse(ans02 == 'true positive' | ans02 == 'false negative', 1, 0),
-         corrFirstBoth = ifelse(ans01 == 'true positive', 1, 0),
-         corrSecBoth = ifelse(ans02 == 'true positive', 1, 0),
+  mutate(corrFirstEgo = ifelse(ans01 == 'true positive', 1, 0),
+         corrSecEgo = ifelse(ans02 == 'true positive', 1, 0),
          corrBayes = ifelse(ans1 == 57 & ans2 == 56, 1, 0)) %>% 
-  select(postId, stim, corrFirstBoth, corrSecBoth, corrBayes) %>% 
-  group_by(corrSecBoth, corrBayes) %>% 
-  summarize(n())
-```
-%>% 
-  pivot_longer(c(corrFirstQ1, corrFirstQ2, corrSecQ1, corrSecQ2, corrFirstBoth, corrSecBoth, corrBayes), names_to = "question", values_to = "correct") %>% 
-  freq_table(question, correct) %>% 
-  filter(col_cat == 1)
+  select(postId, stim, corrSecEgo, corrBayes) %>% 
+  ggplot(aes(x = factor(corrSecEgo), group = factor(corrBayes), fill = factor(corrBayes))) +
+  geom_bar(position = "dodge") +
+  scale_x_discrete("Screening Questions", labels = c("Wrong", "Correct")) + 
+  scale_fill_manual("Bayes Questions", labels = c("Wrong", "Correct"), values = c("Red", "Green"))
 ```
 
+levels = c("0", "1"), 
+levels = c("0", "1"), 
