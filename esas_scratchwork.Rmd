@@ -1,7 +1,9 @@
 ---
 title: "scratchwork"
 author: "Esa"
-output: html_document
+output: 
+  html_document:
+    code_folding: hide
 ---
 
 # Setup 
@@ -14,7 +16,7 @@ library(ggplot2)
 #library(rcompanion)
 #library(rstatix)
 library(BayesFactor)
-#library(freqtables)
+library(freqtables)
 
 cleanedData_cvd4 <- read_csv("cleanedData_cvd4.csv")
 dfCvd4Data <- data.frame(cleanedData_cvd4[,1]) 
@@ -48,7 +50,7 @@ I was confused by the ans01 and ans02 screening questions, and realized that the
 
 ## Alice's work
 
-```{r}
+```{r, eval = TRUE}
 
 egoRightWrong <- data.frame(Study=character(), corr=integer())
 
@@ -91,7 +93,7 @@ egoRightWrongProp
 
 ```
 
-```{r}
+```{r, eval=TRUE}
 #plot -- frequency table
 plt <- egoRightWrong %>% 
   freq_table(Study, corr)
@@ -289,7 +291,6 @@ dfCvd4Data %>%
 
 ```{r}
 library(ggwaffle)
-pal = c(brewer.pal(11, "RdYlGn")[2], brewer.pal(11, "RdYlGn")[9])
 
 ego0 <- dfCvd4Data %>% 
   select(postId, stim, ans01, ans02, ans1, ans2) %>% 
@@ -301,8 +302,23 @@ ego0 <- dfCvd4Data %>%
   waffle_iron(aes_d(group = corrBayes)) %>% 
   ggplot(aes(x, y, fill = as.factor(group))) +
   geom_waffle() +
-  scale_fill_waffle() +
-  theme_waffle()
+  scale_fill_waffle("Bayes Question") +
+  theme_waffle() +
+  labs(title = "Got ego question wrong")
+
+ego1 <- dfCvd4Data %>% 
+  select(postId, stim, ans01, ans02, ans1, ans2) %>% 
+  mutate(corrFirstEgo = ifelse(ans01 == 'true positive', 1, 0),
+         corrSecEgo = ifelse(ans02 == 'true positive', 1, 0),
+         corrBayes = ifelse(ans1 == 57 & ans2 == 56, 1, 0)) %>% 
+  filter(corrSecEgo == 1) %>%
+  select(postId, stim, corrSecEgo, corrBayes) %>% 
+  waffle_iron(aes_d(group = corrBayes)) %>% 
+  ggplot(aes(x, y, fill = as.factor(group))) +
+  geom_waffle() +
+  scale_fill_waffle("Bayes Question") +
+  theme_waffle() + 
+  labs(title = "Got ego question right")
 
 dfCvd4Data %>% 
   select(postId, stim, ans01, ans02, ans1, ans2) %>% 
@@ -314,17 +330,15 @@ dfCvd4Data %>%
   waffle_iron(aes_d(group = corrBayes))%>% 
   ggplot(aes(x, y, fill = as.factor(group))) +
   geom_waffle() +
-  scale_fill_waffle() +
+  scale_fill_waffle("Bayes Question") +
   theme_waffle()
 
-
-ego0
+library(gridExtra)
+grid.arrange(ego0, ego1)
 
 
 ```
-+
-  scale_x_discrete("Screening Questions", labels = c("Wrong", "Correct")) + 
-  scale_fill_manual("Bayes Questions", labels = c("Wrong", "Correct"), values = pal)
+
 
 ```{r}
 makeWaffle <- function(corrSecEgoNum){
