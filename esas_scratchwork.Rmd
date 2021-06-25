@@ -368,7 +368,7 @@ remainder <- math %>%
   select(remainder) %>% 
   first()
 
-x <- c(rep(1:xFullCols, each=yFullRows), rep(10, remainder))
+x <- c(rep(1:xFullCols, each=yFullRows), rep((xFullCols + 1), remainder))
 y <- c(rep(1:yFullRows, xFullCols), 1:remainder)
 
 funcData %>% 
@@ -383,6 +383,54 @@ funcData %>%
 ```
 
 ```{r}
-makeWaffle(1)
+makeWaffle(0)
 ```
 
+Why isn't the function working? It's because in the original I added the remainders by repeating the 10th row that number of times, but in any given scenario the number extra row could change, so I changed the code to (xFullCols+1) instead of 10:
+x <- c(rep(1:xFullCols, each=yFullRows), rep((xFullCols + 1), remainder))
+
+## Altering function
+What if instead of filtering, to create a graph that just has one or the other, I was able to facet wrap?
+
+I think I'd have to get rid of the filter and instead just add a facet_wrap for corrSecEgo -- see if that works (over lunch)!
+```{r}
+makeWaffle <- function(corrSecEgoNum){
+  
+funcData <- dfCvd4Data %>% 
+  select(postId, stim, ans01, ans02, ans1, ans2) %>% 
+  mutate(corrFirstEgo = ifelse(ans01 == 'true positive', 1, 0),
+         corrSecEgo = ifelse(ans02 == 'true positive', 1, 0),
+         corrBayes = ifelse(ans1 == 57 & ans2 == 56, 1, 0)) %>% 
+  filter(corrSecEgo == corrSecEgoNum)
+
+math <- funcData %>%
+  summarize(square = floor(sqrt(n())),
+            leftOver = n() - square*square,
+         extraCol = floor(leftOver/square),
+         remainder = leftOver - extraCol*square,
+         cols = square + extraCol,
+         rows = square)
+
+xFullCols <- math %>% 
+  select(cols) %>% 
+  first()
+yFullRows <- math %>% 
+  select(rows) %>% 
+  first()
+remainder <- math %>% 
+  select(remainder) %>% 
+  first()
+
+x <- c(rep(1:xFullCols, each=yFullRows), rep((xFullCols + 1), remainder))
+y <- c(rep(1:yFullRows, xFullCols), 1:remainder)
+
+funcData %>% 
+  select(postId, stim, corrSecEgo, corrBayes) %>% 
+  arrange(corrBayes) %>% 
+  cbind(x = x, y = y) %>% 
+  ggplot(aes(x, y, fill = as.factor(corrBayes))) +
+  geom_waffle() +
+  scale_fill_waffle() +
+  theme_waffle()
+}
+```
