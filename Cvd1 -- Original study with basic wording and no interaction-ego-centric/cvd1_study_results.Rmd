@@ -1,0 +1,283 @@
+---
+title: "Cvd1 Study Results"
+output: html_notebook
+---
+STEP ONE: Import and prep data for analysis
+Import the cleanedData (from the cvd1 study) and cleanedData_pilot (from breast cancer study) files. Next, for each data set, copy the data from the csv to a data frame. Filter out corrupted data, ie nonsense answers or skipped sections. Filter out colorblind responses. 
+
+```{r import and prep}
+library(lifecycle)
+library(cli)
+
+dfCvd1Data <- data.frame(cleanedData[,1]) 
+for (column in c(2:ncol(cleanedData))){
+  dfCvd1Data <- cbind(dfCvd1Data, cleanedData[,column])
+}
+# drop people who skipped whole sections
+dfCvd1Data <- subset(dfCvd1Data, dfCvd1Data$drop == 0)
+
+# drop people who are colorblind or skipped that q
+dfCvd1Data <- subset(dfCvd1Data, dfCvd1Data$cb == 'not_colorblind')
+
+# drop people who put in answers less than 1 or greater than 100, or NAN
+dfCvd1Data <- subset(dfCvd1Data, (dfCvd1Data$ans1 > 0 & dfCvd1Data$ans1 <= 100))
+dfCvd1Data <- subset(dfCvd1Data, !is.na(dfCvd1Data$ans1))
+dfCvd1Data <- subset(dfCvd1Data, (dfCvd1Data$ans2 >= 0 & dfCvd1Data$ans2 <= 100))
+dfCvd1Data <- subset(dfCvd1Data, !is.na(dfCvd1Data$ans2))
+
+currCvd1Data <- data.frame("ID" = dfCvd1Data[,2], "stim" = dfCvd1Data[,4], "corr" = dfCvd1Data[,61], "spatial" = dfCvd1Data[,62])
+
+str(currCvd1Data)
+
+dfCancerData <- data.frame() 
+for (row in c(1:nrow(cleanedData_pilot))){
+  if((cleanedData_pilot[row, 12] == "worseStatic") | (cleanedData_pilot[row, 12] == "middleStatic") | (cleanedData_pilot[row, 12] == "betterStatic")) {
+    dfCancerData <- rbind(dfCancerData, cleanedData_pilot[row,])
+  }
+}
+
+# drop people who skipped whole sections
+dfCancerData <- subset(dfCancerData, dfCancerData$drop == 0)
+
+# drop people who are colorblind or skipped that q
+dfCancerData <- subset(dfCancerData, dfCancerData$cb == 'not_colorblind')
+
+# drop people who put in answers less than 1 or greater than 100, or NAN
+dfCancerData <- subset(dfCancerData, (dfCancerData$ans1 > 0 & dfCancerData$ans1 <= 100))
+dfCancerData <- subset(dfCancerData, !is.na(dfCancerData$ans1))
+dfCancerData <- subset(dfCancerData, (dfCancerData$ans2 >= 0 & dfCancerData$ans2 <= 100))
+dfCancerData <- subset(dfCancerData, !is.na(dfCancerData$ans2))
+
+currCancerData <- data.frame("ID" = dfCancerData[,2], "stim" = dfCancerData[,12], "corr" = dfCancerData[,64], "spatial" = dfCancerData[,65])
+
+str(currCancerData)
+
+```
+
+
+STEP TWO: Calculate the proportion of correct answer to total responses by visualization type
+Sort cvd1 study data by visualization type: worse (scattered), middle (aligned), and better (grouped). Run the proportion tests to compare the proportion of correct answers by visualization type and graph the results. 
+
+```{r proportion by viz}
+
+worseVizCvd <- data.frame()
+middleVizCvd <- data.frame()
+betterVizCvd <- data.frame()
+
+for (row in 1:nrow(currCvd1Data)){
+  if (currCvd1Data[row,2] == "worseStatic"){
+    worseVizCvd <- rbind(worseVizCvd, currCvd1Data[row,])
+  }
+  if (currCvd1Data[row,2] == "middleStatic"){
+    middleVizCvd <- rbind(middleVizCvd, currCvd1Data[row,])
+  }
+  if (currCvd1Data[row,2] == "betterStatic"){
+    betterVizCvd <- rbind(betterVizCvd, currCvd1Data[row,])
+  }
+}
+
+# worse compared to middle
+worseMiddleProp <- prop.test(x = c(sum(worseVizCvd$corr), sum(middleVizCvd$corr)), n = c(nrow(worseVizCvd), nrow(middleVizCvd)))
+# worse compared to better
+worseBetterProp <- prop.test(x = c(sum(worseVizCvd$corr), sum(betterVizCvd$corr)), n = c(nrow(worseVizCvd), nrow(betterVizCvd)))
+# middle compared to better
+middleBetterProp <- prop.test(x = c(sum(middleVizCvd$corr), sum(betterVizCvd$corr)), n = c(nrow(middleVizCvd), nrow(betterVizCvd)))
+
+#plot 
+plt <- currCvd1Data %>% 
+  freq_table(stim, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt
+
+g <- ggplot(plt,aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_errorbar(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))),
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Viz Type- Cvd Study", y = 'Proportion of Correct Answers') + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=1/3) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+g
+```
+
+
+STEP THREE: Compare to breast cancer study 
+Combine the cvd1 study and breast cancer study results into one data frame, categorized by the study. Run proportion tests to compare the total number correct by study and graph the result. 
+
+```{r proportion by study}
+
+cvdCancer <- data.frame(Study=character(), corr=integer())
+
+for(row in 1:nrow(currCvd1Data)){
+  temp <- data.frame("cvd", currCvd1Data[row, 3])
+  names(temp) <- c("Study", "corr")
+  cvdCancer <- rbind(cvdCancer, temp)
+}
+
+for(row in 1:nrow(currCancerData)){
+   temp <- data.frame("cancer", currCancerData[row, 3])
+  names(temp) <- c("Study", "corr")
+  cvdCancer <- rbind(cvdCancer, temp)
+}
+
+#str(cvdCancer)
+
+cvdCancerProp <- prop.test(x = c(sum(currCvd1Data$corr), sum(currCancerData$corr)), n = c(nrow(currCvd1Data), nrow(currCancerData)))
+#cvdCancerProp
+
+#plot 
+plt <- cvdCancer %>% 
+  freq_table(Study, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt
+
+g <- ggplot(plt,aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))),
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Study", y = 'Proportion of Correct Answers') + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=1/3) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+g
+
+```
+
+
+STEP FOUR: Split population into high and low spatial ability and compare
+Sort the cvd1 study data into high and low spatial ability populations. Run the proportion tests to compare the proportion of correct answers over all visualization types by spatial ability. Graph the result. 
+
+```{r proportion by spatial ability}
+
+pivot <- median(currCvd1Data$spatial)
+
+lowSpatial <- data.frame() 
+highSpatial <- data.frame() 
+bySpatial <- data.frame(Spatial=factor(), corr=integer())
+
+for(row in 1:nrow(currCvd1Data)) {
+  if(currCvd1Data[row, 4] < pivot) {
+    lowSpatial <- rbind(lowSpatial, currCvd1Data[row,])
+    temp <- data.frame("low", currCvd1Data[row, 3])
+    names(temp) <- c("Spatial", "corr")
+    bySpatial <- rbind(bySpatial, temp)
+  }else{
+    highSpatial <- rbind(highSpatial, currCvd1Data[row,])
+    temp <- data.frame("high", currCvd1Data[row, 3])
+    names(temp) <- c("Spatial", "corr")
+    bySpatial <- rbind(bySpatial, temp)
+  }
+}
+
+highLowProp <- prop.test(x = c(sum(lowSpatial$corr), sum(highSpatial$corr)), n = c(nrow(lowSpatial), nrow(highSpatial)))
+highLowProp
+
+#plot 
+plt <- bySpatial %>% 
+  freq_table(Spatial, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt
+
+g <- ggplot(plt,aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_errorbar(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))),
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Spatial Ability", y = 'Proportion of Correct Answers') + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=1/3) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+g
+
+
+```
+
+
+STEP FIVE: Compare between studies by visualization 
+Sort both the cvd1 study data and the breast cancer study data by visualization type. Run proportion tests to compare the proportion of correct answers by visualization type by study. Graph the result. 
+
+```{r proportion between studies by viz}
+
+worseVizCancer <- data.frame()
+middleVizCancer <- data.frame()
+betterVizCancer <- data.frame()
+
+for (row in 1:nrow(currCancerData)){
+  if (currCancerData[row,2] == "worseStatic"){
+    worseVizCancer <- rbind(worseVizCancer, currCancerData[row,])
+  }
+  if (currCancerData[row,2] == "middleStatic"){
+    middleVizCancer <- rbind(middleVizCancer, currCancerData[row,])
+  }
+  if (currCancerData[row,2] == "betterStatic"){
+    betterVizCancer <- rbind(betterVizCancer, currCancerData[row,])
+  }
+}
+
+# worseStatic
+worseCvdCancer <- prop.test(x = c(sum(worseVizCancer$corr), sum(worseVizCvd$corr)), n = c(nrow(worseVizCancer),  nrow(worseVizCvd)))
+worseCvdCancer
+
+# middleStatic
+middleCvdCancer <- prop.test(x = c(sum(middleVizCancer$corr), sum(middleVizCvd$corr)), n = c(nrow(middleVizCancer),  nrow(middleVizCvd)))
+middleCvdCancer
+
+# betterStatic
+betterCvdCancer <- prop.test(x = c(sum(betterVizCancer$corr), sum(betterVizCvd$corr)), n = c(nrow(betterVizCancer),  nrow(betterVizCvd)))
+betterCvdCancer
+
+#plot
+plt <- currCvd1Data %>%
+  freq_table(stim, corr)
+
+plth <- as.data.frame(plt)
+plth <- subset(plth, plth$col_cat == 1)
+plth$row_cat <- as.factor(plth$row_cat)
+plth$sa <- "Cvd Data"
+
+#plot
+plt <- currCancerData %>% 
+  freq_table(stim, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt$sa <- "Cancer Data"
+plt <- rbind(plth, plt)
+
+g <- ggplot(plt,aes(x = row_cat, y = percent_row, 
+               group = sa, color = sa, shape = sa)) +
+  ylim(0, 100) + 
+  geom_errorbar(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Viz Type", y = 'Proportion of Correct Answers') + 
+  theme_classic() + 
+  theme(legend.title=element_blank(), text = element_text(size=15),
+        aspect.ratio=4/9) +
+  coord_flip() + 
+  scale_color_brewer(palette="Paired")
+g
+
+
+```
