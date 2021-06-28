@@ -392,45 +392,91 @@ x <- c(rep(1:xFullCols, each=yFullRows), rep((xFullCols + 1), remainder))
 ## Altering function
 What if instead of filtering, to create a graph that just has one or the other, I was able to facet wrap?
 
-I think I'd have to get rid of the filter and instead just add a facet_wrap for corrSecEgo -- see if that works (over lunch)!
+I think I'd have to get rid of the filter and instead just add a facet_wrap for corrSecEgo -- see if that works!
+
+Update: That does NOT work; the official error message I'm getting is `Error: width must be of length 1 or ncol - 1`. I think the problem -- that I glossed over in my head when thinking this through -- is that I've already programmed the x- and y- coordinates into each point on this graph. The problem is that when I'm trying to do a facet wrap, which is automatic, it has to separate out the two groups and then the positions don't work. (I'm not sure how that error message works, though -- I'm assuming it's just something with ggwaffle.) For now I'm going to go try to recode the x and ys to be separate values for the corrSecEgo groups.
 ```{r}
-makeWaffle <- function(corrSecEgoNum){
-  
+library(ggwaffle)
 funcData <- dfCvd4Data %>% 
   select(postId, stim, ans01, ans02, ans1, ans2) %>% 
   mutate(corrFirstEgo = ifelse(ans01 == 'true positive', 1, 0),
          corrSecEgo = ifelse(ans02 == 'true positive', 1, 0),
-         corrBayes = ifelse(ans1 == 57 & ans2 == 56, 1, 0)) %>% 
-  filter(corrSecEgo == corrSecEgoNum)
+         corrBayes = ifelse(ans1 == 57 & ans2 == 56, 1, 0))
+```
 
-math <- funcData %>%
-  summarize(square = floor(sqrt(n())),
-            leftOver = n() - square*square,
-         extraCol = floor(leftOver/square),
-         remainder = leftOver - extraCol*square,
-         cols = square + extraCol,
-         rows = square)
+```{r}
+createXY <- function (egoAnswer) {
+  mathEgo <- funcData %>%
+    mutate(square = floor(sqrt(n()))) %>% #for all corrSecEgo -- the number of rows
+    filter(corrSecEgo == egoAnswer) %>% #now filter for just that one answer
+    summarize(cols = floor(n()/square), #the number of full cols given the row from square
+         #leftOver = n() - square*square, # I don;t think i need these now
+         #extraCol = floor(leftOver/square), #Extra full cols added onto square
+         remainder = n() - cols*square, #remainder is the num values not in full cols
+         #cols = square + extraCol, #number of cols
+         rows = square) %>%  #the number of rows is just square
+    distinct()
 
-xFullCols <- math %>% 
-  select(cols) %>% 
-  first()
-yFullRows <- math %>% 
-  select(rows) %>% 
-  first()
-remainder <- math %>% 
-  select(remainder) %>% 
-  first()
+  xFullCols <- mathEgo %>% 
+    select(cols) %>% 
+    first()
+  yFullRows <- mathEgo %>% 
+    select(rows) %>% 
+    first()
+  remainder <- mathEgo %>% 
+    select(remainder) %>% 
+    first()
+  
+  x <- c(rep(1:xFullCols, each=yFullRows), rep((xFullCols + 1), remainder))
+  y <- c(rep(1:yFullRows, xFullCols), 1:remainder)
+  
+  #if (egoAnswer == 1) {
+  #  x <- x + xFullCols
+ # }
+  
+  xy <- data.frame(x, y)
+}
 
-x <- c(rep(1:xFullCols, each=yFullRows), rep((xFullCols + 1), remainder))
-y <- c(rep(1:yFullRows, xFullCols), 1:remainder)
+xy <- createXY(0) %>% 
+  rbind(createXY(1))
+  
+funcData %>% 
+  select(postId, stim, corrSecEgo, corrBayes) %>% 
+  arrange(corrSecEgo) %>% 
+  #filter(corrSecEgo == 1)%>% 
+  group_by(corrSecEgo) %>% 
+  arrange(corrSecEgo, corrBayes) %>% 
+  cbind(x = xy$x, y = xy$y) %>% 
+  ggplot(aes(x, y, fill = as.factor(corrBayes))) +
+  geom_waffle() +
+  #facet_wrap(~corrSecEgo) +
+  #scale_fill_waffle() +
+  theme_waffle()
+  
+new <- createXY(0) %>% select(x) %>% arrange(desc(x)) %>% head(1)
+new
+``` 
+The only thing now that I have to fix is that the x values for corr=1 are all the way off to the other side. To fix that, I need to have it calculate what the number of cols (x positions) would be for corr=0, then add that to the x values -- not the number of x values in corr=1.
+
+
+xy <- createXY(0) %>% 
+  rbind(createXY(1))
+xy0 <- createXY(0)
+xy1 <- createXY(1)
+
 
 funcData %>% 
   select(postId, stim, corrSecEgo, corrBayes) %>% 
+  arrange(corrSecEgo) %>% 
+  filter(corrSecEgo == 0)%>% 
   arrange(corrBayes) %>% 
-  cbind(x = x, y = y) %>% 
+  cbind(x = xy0$x, y = xy0$y) 
+%>% 
   ggplot(aes(x, y, fill = as.factor(corrBayes))) +
   geom_waffle() +
+  facet_wrap(~corrSecEgo) +
   scale_fill_waffle() +
   theme_waffle()
-}
+
+
 ```
