@@ -1,0 +1,735 @@
+---
+title: "Cvd1 Study Results"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Data Cleaning 
+
+```{r import and prep}
+library(dplyr)
+library(freqtables)
+library(ggplot2)
+library("gridExtra")  
+
+# Define functions 
+rbind.all.columns <- function(x, y) {
+  x.diff <- setdiff(colnames(x), colnames(y))
+  y.diff <- setdiff(colnames(y), colnames(x))
+  x[, c(as.character(y.diff))] <- NA
+  y[, c(as.character(x.diff))] <- NA
+  return(rbind(x, y))
+}
+
+#set working directory for files
+setwd("~/Documents/Documents - Ab’s MacBook Pro (3)/Research/covid_bayes")
+
+#read in data
+dfCvd1Data <- read.csv("cleanedData.csv") 
+
+# drop people who skipped whole sections
+dfCvd1Data <- subset(dfCvd1Data, dfCvd1Data$drop == 0)
+
+# drop people who are colorblind or skipped that q
+dfCvd1Data <- subset(dfCvd1Data, dfCvd1Data$cb == 'not_colorblind')
+
+# drop people who put in answers less than 1 or greater than 100, or NAN
+dfCvd1Data <- subset(dfCvd1Data, (dfCvd1Data$ans1 > 0 & dfCvd1Data$ans1 <= 100))
+dfCvd1Data <- subset(dfCvd1Data, !is.na(dfCvd1Data$ans1))
+dfCvd1Data <- subset(dfCvd1Data, (dfCvd1Data$ans2 >= 0 & dfCvd1Data$ans2 <= 100))
+dfCvd1Data <- subset(dfCvd1Data, !is.na(dfCvd1Data$ans2))
+
+# add var for base vis
+dfCvd1Data$base <- ifelse((dfCvd1Data$stim == "better" | 
+                        dfCvd1Data$stim == 'betterStatic'), "grouped", 
+                ifelse((dfCvd1Data$stim == "middle" | 
+                          dfCvd1Data$stim == 'middleStatic'), "aligned", 
+                  ifelse((dfCvd1Data$stim == "worse" | 
+                            dfCvd1Data$stim == 'worseStatic'), "randomized",
+                         "oops")))
+dfCvd1Data$base <- as.factor(dfCvd1Data$base)
+dfCvd1Data$base <- ordered(dfCvd1Data$base, levels = c("grouped", "aligned", "randomized"))
+summary(dfCvd1Data$base)
+
+# change time from milli-seconds to seconds
+dfCvd1Data$time <- dfCvd1Data$time_diff_exp / 1000 
+summary(dfCvd1Data$time)
+
+# add scenario var
+dfCvd1Data$scenario <- "COVID"
+
+# read in Ab's interaction study data as base case  
+dfBaseCase <- read.csv("cleanedData_pilot.csv")
+
+# drop people who skipped whole sections
+dfBaseCase <- subset(dfBaseCase, dfBaseCase$drop == 0)
+
+# drop people who are colorblind or skipped that q
+dfBaseCase <- subset(dfBaseCase, dfBaseCase$cb == 'not_colorblind')
+
+# drop people who put in answers less than 1 or greater than 100, or NAN
+dfBaseCase <- subset(dfBaseCase, (dfBaseCase$ans1 > 0 & dfBaseCase$ans1 <= 100))
+dfBaseCase <- subset(dfBaseCase, !is.na(dfBaseCase$ans1))
+dfBaseCase <- subset(dfBaseCase, (dfBaseCase$ans2 >= 0 & dfBaseCase$ans2 <= 100))
+dfBaseCase <- subset(dfBaseCase, !is.na(dfBaseCase$ans2))
+
+# add var for interaction type and subset to static  
+dfBaseCase$int <- ifelse((dfBaseCase$stim == 'better' | 
+                              dfBaseCase$stim == 'middle' | 
+                              dfBaseCase$stim == 'worse'), 'cbAll', 'static')
+dfBaseCase <- subset(dfBaseCase, dfBaseCase$int == 'static')
+dfBaseCase$int <- as.factor(dfBaseCase$int)
+
+# add var for base vis
+dfBaseCase$base <- ifelse((dfBaseCase$stim == "better" | 
+                        dfBaseCase$stim == 'betterStatic'), "grouped", 
+                ifelse((dfBaseCase$stim == "middle" | 
+                          dfBaseCase$stim == 'middleStatic'), "aligned", 
+                  ifelse((dfBaseCase$stim == "worse" | 
+                            dfBaseCase$stim == 'worseStatic'), "randomized",
+                         "oops")))
+dfBaseCase$base <- as.factor(dfBaseCase$base)
+dfBaseCase$base <- ordered(dfBaseCase$base, levels = c("grouped", "aligned", "randomized"))
+summary(dfBaseCase$base)
+
+# change time from milli-seconds to seconds
+dfBaseCase$time <- dfBaseCase$time_diff_exp / 1000 
+summary(dfBaseCase$time)
+
+# add scenario var
+dfBaseCase$scenario <- "Base Case Disease X"
+
+```
+
+## Is accuracy modulated by base visualization? 
+
+Run a 2-sample test for equality of proportions of accuracy ~ base for the covid experiment and the original. We find no significant differences within either scenario.  
+
+```{r accuracy_base}
+
+# How does accuracy vary across base? 
+
+# CVD
+t_corr_by_bases_cvd <- xtabs( ~ base + corr, dfCvd1Data)
+t_corr_by_bases_cvd
+
+prop.test(t_corr_by_bases_cvd, alternative = "two.sided")
+
+#orig
+t_corr_by_bases_orig <- xtabs( ~ base + corr, dfBaseCase)
+t_corr_by_bases_orig
+
+prop.test(t_corr_by_bases_orig, alternative = "two.sided")
+
+#plot 
+
+# CVD
+plt <- dfCvd1Data %>% 
+  freq_table(base, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt$row_cat <- ordered(plt$row_cat, levels = c("randomized", "aligned", "grouped"))
+plt
+
+g_cvd <- ggplot(plt, aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Base", y = 'Proportion of Correct Answers',
+       title = "COVID") + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=4/9) +
+  coord_flip() + 
+  scale_color_brewer(palette="Set1")
+#ggsave("e1_acc_by_bases.png")
+
+# orig
+plt <- dfBaseCase %>% 
+  freq_table(base, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt$row_cat <- ordered(plt$row_cat, levels = c("randomized", "aligned", "grouped"))
+plt
+
+g_orig <- ggplot(plt, aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Base", y = 'Proportion of Correct Answers', 
+       title = "Original") + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=4/9) +
+  coord_flip() + 
+  scale_color_brewer(palette="Set1")
+#ggsave("e1_acc_by_bases.png")
+
+grid.arrange(g_cvd, g_orig, ncol = 1) 
+
+
+```
+
+## Is accuracy significantly different across scenarios? 
+
+Run a 1-sample test for equality of proportions of accuracy ~ scenario for the combined data. 
+
+```{r accuracy_scenario}
+
+# How does accuracy vary across scenario? 
+
+# combine datasets
+df_combined <- rbind.all.columns(dfBaseCase, dfCvd1Data)
+
+# prop test
+t_corr_by_scenario <- xtabs( ~ scenario + corr, df_combined)
+t_corr_by_scenario
+
+prop.test(t_corr_by_scenario, alternative = "two.sided")
+
+#plot 
+plt <- df_combined %>% 
+  freq_table(scenario, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt
+
+g <- ggplot(plt, aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Scenario", y = 'Proportion of Correct Answers') + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=4/9) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+#ggsave("e1_acc_by_bases.png")
+g
+
+```
+
+## Is accuracy significantly different across scenarios and bases? 
+
+Run a 6-sample test for equality of proportions of accuracy ~ scenario X base.
+
+```{r accuracy_base_scenario}
+
+# Look for interaction between scenario and base 
+
+#need counts of successes, and counts of trials 
+all_corr <- subset(df_combined, df_combined$corr == 1)
+
+t_succ <- xtabs( ~ base + scenario, all_corr)
+t_succ
+t_succ_v <- as.vector(t_succ)
+t_succ_v
+
+t_total <- xtabs( ~ base + scenario, df_combined)
+t_total
+t_total_v <- as.vector(t_total)
+t_total_v
+
+prop.test(t_succ_v, t_total_v, alternative = "two.sided")
+
+#plot
+t_succ_v <- as.data.frame(t_succ_v)
+t_total_v <- as.data.frame(t_total_v)
+
+cvd_grouped <- prop.test(t_succ_v[1,], t_total_v[1,], 
+                           alternative = "two.sided")
+cvd_aligned <- prop.test(t_succ_v[2,], t_total_v[2,], 
+                           alternative = "two.sided")
+cvd_randomized <- prop.test(t_succ_v[3,], t_total_v[3,], 
+                              alternative ="two.sided")
+orig_grouped <- prop.test(t_succ_v[4,], t_total_v[4,], 
+                            alternative = "two.sided")
+orig_aligned <- prop.test(t_succ_v[5,], t_total_v[5,], 
+                            alternative = "two.sided")
+orig_randomized <- prop.test(t_succ_v[6,], t_total_v[6,], 
+                               alternative = "two.sided")
+plt <- rbind(
+c("COVID - grouped", "COVID", "grouped", cvd_grouped$estimate, 
+  cvd_grouped$conf.int[1], cvd_grouped$conf.int[2]),
+c("COVID - aligned", "COVID", "aligned", cvd_aligned$estimate, 
+  cvd_aligned$conf.int[1], cvd_aligned$conf.int[2]),
+c("COVID - randomized", "COVID", "randomized", cvd_randomized$estimate,
+  cvd_randomized$conf.int[1], cvd_randomized$conf.int[2]),
+c("Disease X - grouped", "Disease X", "grouped", orig_grouped$estimate, 
+  orig_grouped$conf.int[1], orig_grouped$conf.int[2]),
+c("Disease X - aligned", "Disease X", "aligned", orig_aligned$estimate, 
+  orig_aligned$conf.int[1], orig_aligned$conf.int[2]),
+c("Disease X - randomized","Disease X", "randomized", orig_randomized$estimate,
+  orig_randomized$conf.int[1], orig_randomized$conf.int[2]))
+
+colnames(plt) <- c("grp", "scenario", "base", "prop", "lcl", "ucl")
+plt <- as.data.frame(plt)
+plt$prop <- as.numeric(as.character(plt$prop))*100
+plt$lcl <- as.numeric(as.character(plt$lcl))*100
+plt$ucl <- as.numeric(as.character(plt$ucl))*100
+plt$grp <- as.factor(plt$grp)
+plt$grp <- ordered(plt$grp, 
+                   levels = c("COVID - randomized",
+                              "Disease X - randomized",
+                              "COVID - aligned",
+                              "Disease X - aligned", 
+                              "COVID - grouped",
+                              "Disease X - grouped"))
+plt
+
+g <- ggplot(plt, aes(x = grp, y = prop, 
+               group = scenario, color = scenario)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl, ymax = ucl), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(prop, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Base and Scenario", y = 'Proportion of Correct Answers') + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15)) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+g
+#ggsave("e1_acc_by_bases_and_int.png")
+
+```
+
+## SA: Split data for SA analyses
+```{r SA_split}
+#split data into high and low SA
+# Add spatial ability categories by splitting around median spatial ability score 
+
+# CVD
+m <- median(dfCvd1Data$spatialAbility, na.rm = TRUE)
+m
+r <- range(dfCvd1Data$spatialAbility, na.rm = TRUE)
+r
+dfCvd1Data$spatialHiLow <- ifelse(dfCvd1Data$spatialAbility >= m, "High", "Low")
+dfCvd1Data$spatialHiLow <- as.factor(dfCvd1Data$spatialHiLow)
+summary(dfCvd1Data$spatialHiLow)
+
+dfCvd1Data_high <- subset(dfCvd1Data, dfCvd1Data$spatialHiLow == "High")
+dfCvd1Data_low <- subset(dfCvd1Data, dfCvd1Data$spatialHiLow == "Low")
+
+# orig
+m <- median(dfBaseCase$spatialAbility, na.rm = TRUE)
+m
+r <- range(dfBaseCase$spatialAbility, na.rm = TRUE)
+r
+dfBaseCase$spatialHiLow <- ifelse(dfBaseCase$spatialAbility >= m, "High", "Low")
+dfBaseCase$spatialHiLow <- as.factor(dfBaseCase$spatialHiLow)
+summary(dfBaseCase$spatialHiLow)
+
+dfBaseCase_high <- subset(dfBaseCase, dfBaseCase$spatialHiLow == "High")
+dfBaseCase_low <- subset(dfBaseCase, dfBaseCase$spatialHiLow == "Low")
+
+# combined
+m <- median(df_combined$spatialAbility, na.rm = TRUE)
+m
+r <- range(df_combined$spatialAbility, na.rm = TRUE)
+r
+df_combined$spatialHiLow <- ifelse(df_combined$spatialAbility >= m, "High", "Low")
+df_combined$spatialHiLow <- as.factor(df_combined$spatialHiLow)
+summary(df_combined$spatialHiLow)
+
+df_combined_high <- subset(df_combined, df_combined$spatialHiLow == "High")
+df_combined_low <- subset(df_combined, df_combined$spatialHiLow == "Low")
+
+```
+
+## SA: Is accuracy modulated by base visualization? 
+
+Run a 2-sample test for equality of proportions of accuracy ~ base for the covid experiment and the original within each SA. We find no significant differences within either scenario.  
+
+```{r accuracy_base_SA}
+# How does accuracy vary across base? 
+
+# High 
+
+# CVD
+t_corr_by_bases_cvd <- xtabs( ~ base + corr, dfCvd1Data_high)
+t_corr_by_bases_cvd
+
+prop.test(t_corr_by_bases_cvd, alternative = "two.sided")
+
+#orig
+t_corr_by_bases_orig <- xtabs( ~ base + corr, dfBaseCase_high)
+t_corr_by_bases_orig
+
+prop.test(t_corr_by_bases_orig, alternative = "two.sided")
+
+#plot 
+
+# CVD
+plt <- dfCvd1Data_high %>% 
+  freq_table(base, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt$row_cat <- ordered(plt$row_cat, levels = c("randomized", "aligned", "grouped"))
+plt
+
+g_cvd <- ggplot(plt, aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Base", y = 'Proportion of Correct Answers',
+       title = "COVID High SA") + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=4/9) +
+  coord_flip() + 
+  scale_color_brewer(palette="Set1")
+#ggsave("e1_acc_by_bases.png")
+
+# orig
+plt <- dfBaseCase_high %>% 
+  freq_table(base, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt$row_cat <- ordered(plt$row_cat, levels = c("randomized", "aligned", "grouped"))
+plt
+
+g_orig <- ggplot(plt, aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Base", y = 'Proportion of Correct Answers', 
+       title = "Original High SA") + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=4/9) +
+  coord_flip() + 
+  scale_color_brewer(palette="Set1")
+#ggsave("e1_acc_by_bases.png")
+
+grid.arrange(g_cvd, g_orig, ncol = 1) 
+
+# Low
+
+# CVD
+t_corr_by_bases_cvd <- xtabs( ~ base + corr, dfCvd1Data_low)
+t_corr_by_bases_cvd
+
+prop.test(t_corr_by_bases_cvd, alternative = "two.sided")
+
+#orig
+t_corr_by_bases_orig <- xtabs( ~ base + corr, dfBaseCase_low)
+t_corr_by_bases_orig
+
+prop.test(t_corr_by_bases_orig, alternative = "two.sided")
+
+#plot 
+
+# CVD
+plt <- dfCvd1Data_low %>% 
+  freq_table(base, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt$row_cat <- ordered(plt$row_cat, levels = c("randomized", "aligned", "grouped"))
+plt
+
+g_cvd <- ggplot(plt, aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Base", y = 'Proportion of Correct Answers',
+       title = "COVID Low SA") + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=4/9) +
+  coord_flip() + 
+  scale_color_brewer(palette="Set1")
+#ggsave("e1_acc_by_bases.png")
+
+# orig
+plt <- dfBaseCase_low %>% 
+  freq_table(base, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt$row_cat <- ordered(plt$row_cat, levels = c("randomized", "aligned", "grouped"))
+plt
+
+g_orig <- ggplot(plt, aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Base", y = 'Proportion of Correct Answers', 
+       title = "Original Low SA") + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=4/9) +
+  coord_flip() + 
+  scale_color_brewer(palette="Set1")
+#ggsave("e1_acc_by_bases.png")
+
+grid.arrange(g_cvd, g_orig, ncol = 1) 
+
+```
+
+## SA: Is accuracy significantly different across scenarios? 
+
+Run a 1-sample test for equality of proportions of accuracy ~ scenario for the combined data across each SA. 
+
+```{r accuracy_scenario_SA}
+
+# How does accuracy vary across scenario? 
+
+# High 
+
+# prop test
+t_corr_by_scenario <- xtabs( ~ scenario + corr, df_combined_high)
+t_corr_by_scenario
+
+prop.test(t_corr_by_scenario, alternative = "two.sided")
+
+#plot 
+plt <- df_combined_high %>% 
+  freq_table(scenario, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt
+
+g_high <- ggplot(plt, aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Scenario", y = 'Proportion of Correct Answers',
+       title = "High SA") + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=4/9) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+#ggsave("e1_acc_by_bases.png")
+
+# Low 
+
+# prop test
+t_corr_by_scenario <- xtabs( ~ scenario + corr, df_combined_low)
+t_corr_by_scenario
+
+prop.test(t_corr_by_scenario, alternative = "two.sided")
+
+#plot 
+plt <- df_combined_low %>% 
+  freq_table(scenario, corr)
+
+plt <- as.data.frame(plt)
+plt <- subset(plt, plt$col_cat == 1)
+plt$row_cat <- as.factor(plt$row_cat)
+plt
+
+g_low <- ggplot(plt, aes(x = row_cat, y = percent_row, 
+               group = row_cat, color = row_cat)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl_row, ymax = ucl_row), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(percent_row, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Scenario", y = 'Proportion of Correct Answers',
+       title = "Low SA") + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15),
+        aspect.ratio=4/9) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+#ggsave("e1_acc_by_bases.png")
+
+grid.arrange(g_high, g_low, ncol = 1)
+
+```
+
+## SA: Is accuracy significantly different across scenarios and bases? 
+
+Run a 6-sample test for equality of proportions of accuracy ~ scenario X base for each SA.
+
+```{r accuracy_base_scenario_SA}
+
+# Look for interaction between scenario and base 
+
+# High 
+
+#need counts of successes, and counts of trials 
+all_corr <- subset(df_combined_high, df_combined_high$corr == 1)
+
+t_succ <- xtabs( ~ base + scenario, all_corr)
+t_succ
+t_succ_v <- as.vector(t_succ)
+t_succ_v
+
+t_total <- xtabs( ~ base + scenario, df_combined_high)
+t_total
+t_total_v <- as.vector(t_total)
+t_total_v
+
+prop.test(t_succ_v, t_total_v, alternative = "two.sided")
+
+#plot
+t_succ_v <- as.data.frame(t_succ_v)
+t_total_v <- as.data.frame(t_total_v)
+
+cvd_grouped <- prop.test(t_succ_v[1,], t_total_v[1,], 
+                           alternative = "two.sided")
+cvd_aligned <- prop.test(t_succ_v[2,], t_total_v[2,], 
+                           alternative = "two.sided")
+cvd_randomized <- prop.test(t_succ_v[3,], t_total_v[3,], 
+                              alternative ="two.sided")
+orig_grouped <- prop.test(t_succ_v[4,], t_total_v[4,], 
+                            alternative = "two.sided")
+orig_aligned <- prop.test(t_succ_v[5,], t_total_v[5,], 
+                            alternative = "two.sided")
+orig_randomized <- prop.test(t_succ_v[6,], t_total_v[6,], 
+                               alternative = "two.sided")
+plt <- rbind(
+c("COVID - grouped", "COVID", "grouped", cvd_grouped$estimate, 
+  cvd_grouped$conf.int[1], cvd_grouped$conf.int[2]),
+c("COVID - aligned", "COVID", "aligned", cvd_aligned$estimate, 
+  cvd_aligned$conf.int[1], cvd_aligned$conf.int[2]),
+c("COVID - randomized", "COVID", "randomized", cvd_randomized$estimate,
+  cvd_randomized$conf.int[1], cvd_randomized$conf.int[2]),
+c("Disease X - grouped", "Disease X", "grouped", orig_grouped$estimate, 
+  orig_grouped$conf.int[1], orig_grouped$conf.int[2]),
+c("Disease X - aligned", "Disease X", "aligned", orig_aligned$estimate, 
+  orig_aligned$conf.int[1], orig_aligned$conf.int[2]),
+c("Disease X - randomized","Disease X", "randomized", orig_randomized$estimate,
+  orig_randomized$conf.int[1], orig_randomized$conf.int[2]))
+
+colnames(plt) <- c("grp", "scenario", "base", "prop", "lcl", "ucl")
+plt <- as.data.frame(plt)
+plt$prop <- as.numeric(as.character(plt$prop))*100
+plt$lcl <- as.numeric(as.character(plt$lcl))*100
+plt$ucl <- as.numeric(as.character(plt$ucl))*100
+plt$grp <- as.factor(plt$grp)
+plt$grp <- ordered(plt$grp, 
+                   levels = c("COVID - randomized",
+                              "Disease X - randomized",
+                              "COVID - aligned",
+                              "Disease X - aligned", 
+                              "COVID - grouped",
+                              "Disease X - grouped"))
+plt
+
+g_high <- ggplot(plt, aes(x = grp, y = prop, 
+               group = scenario, color = scenario)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl, ymax = ucl), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(prop, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Base and Scenario", y = 'Proportion of Correct Answers',
+       title = "High SA") + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15)) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+#ggsave("e1_acc_by_bases_and_int.png")
+
+# Low 
+
+#need counts of successes, and counts of trials 
+all_corr <- subset(df_combined_low, df_combined_low$corr == 1)
+
+t_succ <- xtabs( ~ base + scenario, all_corr)
+t_succ
+t_succ_v <- as.vector(t_succ)
+t_succ_v
+
+t_total <- xtabs( ~ base + scenario, df_combined_low)
+t_total
+t_total_v <- as.vector(t_total)
+t_total_v
+
+prop.test(t_succ_v, t_total_v, alternative = "two.sided")
+
+#plot
+t_succ_v <- as.data.frame(t_succ_v)
+t_total_v <- as.data.frame(t_total_v)
+
+cvd_grouped <- prop.test(t_succ_v[1,], t_total_v[1,], 
+                           alternative = "two.sided")
+cvd_aligned <- prop.test(t_succ_v[2,], t_total_v[2,], 
+                           alternative = "two.sided")
+cvd_randomized <- prop.test(t_succ_v[3,], t_total_v[3,], 
+                              alternative ="two.sided")
+orig_grouped <- prop.test(t_succ_v[4,], t_total_v[4,], 
+                            alternative = "two.sided")
+orig_aligned <- prop.test(t_succ_v[5,], t_total_v[5,], 
+                            alternative = "two.sided")
+orig_randomized <- prop.test(t_succ_v[6,], t_total_v[6,], 
+                               alternative = "two.sided")
+plt <- rbind(
+c("COVID - grouped", "COVID", "grouped", cvd_grouped$estimate, 
+  cvd_grouped$conf.int[1], cvd_grouped$conf.int[2]),
+c("COVID - aligned", "COVID", "aligned", cvd_aligned$estimate, 
+  cvd_aligned$conf.int[1], cvd_aligned$conf.int[2]),
+c("COVID - randomized", "COVID", "randomized", cvd_randomized$estimate,
+  cvd_randomized$conf.int[1], cvd_randomized$conf.int[2]),
+c("Disease X - grouped", "Disease X", "grouped", orig_grouped$estimate, 
+  orig_grouped$conf.int[1], orig_grouped$conf.int[2]),
+c("Disease X - aligned", "Disease X", "aligned", orig_aligned$estimate, 
+  orig_aligned$conf.int[1], orig_aligned$conf.int[2]),
+c("Disease X - randomized","Disease X", "randomized", orig_randomized$estimate,
+  orig_randomized$conf.int[1], orig_randomized$conf.int[2]))
+
+colnames(plt) <- c("grp", "scenario", "base", "prop", "lcl", "ucl")
+plt <- as.data.frame(plt)
+plt$prop <- as.numeric(as.character(plt$prop))*100
+plt$lcl <- as.numeric(as.character(plt$lcl))*100
+plt$ucl <- as.numeric(as.character(plt$ucl))*100
+plt$grp <- as.factor(plt$grp)
+plt$grp <- ordered(plt$grp, 
+                   levels = c("COVID - randomized",
+                              "Disease X - randomized",
+                              "COVID - aligned",
+                              "Disease X - aligned", 
+                              "COVID - grouped",
+                              "Disease X - grouped"))
+plt
+
+g_low <- ggplot(plt, aes(x = grp, y = prop, 
+               group = scenario, color = scenario)) +
+  ylim(0, 100) + 
+  geom_pointrange(aes(ymin = lcl, ymax = ucl), size = 1) +
+  geom_text(aes(label=sprintf("%0.2f", round(prop, digits = 2))), 
+            color = "black", vjust=-1, size = 4) +
+  labs(x = "Base and Scenario", y = 'Proportion of Correct Answers',
+       title = "Low SA") + 
+  theme_classic() + 
+  theme(legend.position = "none", text = element_text(size=15)) +
+  coord_flip() + 
+  scale_color_brewer(palette="Dark2")
+#ggsave("e1_acc_by_bases_and_int.png")
+
+grid.arrange(g_high, g_low, ncol = 1)
+
+```
